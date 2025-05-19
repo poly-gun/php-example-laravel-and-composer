@@ -1,0 +1,23 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        files: (automation/|ci/|code-scanning/|deployments/|pages/).*(yaml|yml|json)$
+
+      - id: end-of-file-fixer
+
+      - id: check-json
+      - id: check-yaml
+        exclude: ^\.github/code-scanning/(nowsecure\.yml|nowsecure-mobile-sbom\.yml?$)
+
+      - id: check-added-large-files
+      - id: check-merge-conflict
+
+      - id: detect-aws-credentials
+      - id: detect-private-key
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.2
+    hooks:
+      - id: gitleaks

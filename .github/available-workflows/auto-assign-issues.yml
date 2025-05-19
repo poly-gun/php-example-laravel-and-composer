@@ -1,0 +1,15 @@
+name: Issue-Assignment
+
+on:
+    issues:
+        types: [opened]
+
+jobs:
+    auto-assign:
+        runs-on: ubuntu-latest
+        steps:
+            - name: "Auto-Assign-Issue"
+              uses: pozil/auto-assign-issue@v1.11.0
+              with:
+                  assignees: Segmentational
+                  numOfAssignee: 1

@@ -1,0 +1,258 @@
+name: Example
+
+on:
+  workflow_dispatch:
+    inputs:
+      log-level:
+        description: "Runtime logging level."
+        required: true
+        default: "DEBUG"
+        type: choice
+        options:
+          - TRACE
+          - DEBUG
+          - INFO
+          - WARN
+          - ERROR
+      environment:
+        description: "The target environment to deploy to."
+        required: true
+        type: environment
+        options:
+          - Development
+          - QA
+          - UAT
+          - Pre-Production
+          - Production
+  push:
+    # Sequence of patterns matched against refs/heads
+    branches-ignore:
+      - 'mona/octocat'
+      - 'releases/**-alpha'
+    # Sequence of patterns matched against refs/tags
+    tags-ignore:
+      - "release/"
+      - v1.*
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - id: "checkout"
+        name: "(GH) Checkout"
+        uses: actions/checkout@v4
+      - id: "image-name"
+        name: (User) Set Image Name
+        shell: bash
+        run: |
+          echo "image-name=$(basename "${{ github.repository }}")" >> ${GITHUB_ENV}
+      - id: "image-version-branch"
+        if: github.ref_type != 'tag'
+        name: (User) Set Image Version (Hash)
+        shell: bash
+        run: |
+          echo "image-version=${{ github.sha }}" >> ${GITHUB_ENV}
+      - id: "image-version-tag-v"
+        if: github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
+        name: (User) Set Image Version (Version)
+        shell: bash
+        run: |
+          echo "image-version=${GITHUB_REF#refs/tags/v}" >> ${GITHUB_ENV}
+      - id: "image-version-tag-semantic"
+        if: github.ref_type == 'tag' && ! startsWith(github.ref, 'refs/tags/v')
+        name: (User) Set Image Version (Semantic)
+        shell: bash
+        run: |
+          echo "image-version=${GITHUB_REF#refs/tags/}" >> ${GITHUB_ENV}
+      - id: "image-tag"
+        name: (User) Set Image Tag
+        shell: bash
+        run: |
+          echo "image-tag=${{ env.image-name }}:${{ env.image-version }}" >> ${GITHUB_ENV}
+      - id: "build"
+        name: (User) Image Build
+        shell: bash
+        run: |
+          echo "[Debug] Image Tag: \"${{ env.image-tag }}\""
+          docker build . --file Dockerfile --tag "${{ env.image-tag }}"
+      - id: "save"
+        name: "(User) Image Save"
+        shell: bash
+        run: |
+          echo "[Debug] Image Archive: \"image.tar\""
+          docker save --output "image.tar" ${{ env.image-tag }}
+      - id: "upload-image"
+        name: (GH) Upload Image
+        uses: actions/upload-artifact@v4
+        with:
+          name: image
+          retention-days: 1
+          path: "image.tar"
+          if-no-files-found: error
+  configuration:
+    name: Configuration
+    runs-on: ubuntu-latest
+    steps:
+      - id: "checkout"
+        name: "(GH) Checkout"
+        uses: actions/checkout@v4
+      - id: "image-tag"
+        name: (User) Set Image Tag
+        shell: bash
+        run: |
+          echo "image-tag=$(basename "${{ github.repository }}")" >> ${GITHUB_ENV}
+      - id: "configuration"
+        name: (User) Configuration
+        shell: bash
+        run: |
+          # Auto-Generation: python3 ./scripts/extract-environment-variables.py --env-file .env.example
+
+          cp .env.example .env
+
+          function replace() {
+            sed -i "s/${1}=.*$/${1}=\"${2}\"/" .env
+          }
+
+          # Pretend mock around a secret-storage solution such as AWS SecretsManager or Vault.
+          function get-secret-value() {
+            printf "%s" "$(head -c 32 /dev/urandom | xxd -p -u | head -n 1)"
+          }
+
+          replace "APP_KEY" "${{ secrets.APP_KEY }}"
+          replace "DB_PASSWORD" "${{ secrets.DB_PASSWORD }}"
+          replace "AWS_ACCESS_KEY_ID" "${{ secrets.AWS_ACCESS_KEY_ID }}"
+          replace "AWS_SECRET_ACCESS_KEY" "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          replace "AWS_BUCKET" "${{ secrets.AWS_BUCKET }}"
+
+          replace "TEST_SECRET_1" "$(get-secret-value)"
+      - id: "upload-environment-file"
+        name: (GH) Upload Environment File
+        uses: actions/upload-artifact@v4
+        with:
+          name: environment-file
+          retention-days: 1
+          path: .env
+          if-no-files-found: error
+          compression-level: 9
+          overwrite: false
+          include-hidden-files: true
+  publish:
+    name: Publish
+    needs:
+      - build
+      - configuration
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    if: ${{ startsWith(github.ref, 'refs/tags/v') && ! contains(github.ref, '-') }}
+    steps:
+      - id: "download-image"
+        name: (User) Download Image
+        uses: actions/download-artifact@v4
+        with:
+          name: image
+      - id: "load"
+        name: (User) Image Load
+        shell: bash
+        run: |
+          docker load --input "image.tar"
+      - id: "image-name"
+        name: (User) Set Image Name
+        shell: bash
+        run: |
+          echo "image-name=$(basename "${{ github.repository }}")" >> ${GITHUB_ENV}
+      - id: "image-version-branch"
+        if: github.ref_type != 'tag'
+        name: (User) Set Image Version (Hash)
+        shell: bash
+        run: |
+          echo "image-version=${{ github.sha }}" >> ${GITHUB_ENV}
+      - id: "image-version-tag-v"
+        if: github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
+        name: (User) Set Image Version (Version)
+        shell: bash
+        run: |
+          echo "image-version=${GITHUB_REF#refs/tags/v}" >> ${GITHUB_ENV}
+      - id: "image-version-tag-semantic"
+        if: github.ref_type == 'tag' && ! startsWith(github.ref, 'refs/tags/v')
+        name: (User) Set Image Version (Semantic)
+        shell: bash
+        run: |
+          echo "image-version=${GITHUB_REF#refs/tags/}" >> ${GITHUB_ENV}
+      - id: "image-version"
+        name: (User) Export Image Version
+        shell: bash
+        run: |
+          echo "version=${{ env.image-version }}" >> ${GITHUB_OUTPUT}
+      - name: (Docker) Authentication
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: "publish"
+        name: (Docker) Publish
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags:
+  integration-testing:
+    name: Integration-Testing
+    needs:
+      - build
+      - configuration
+    runs-on: ubuntu-latest
+    steps:
+      - id: "download-environment-file"
+        name: (User) Download Environment File
+        uses: actions/download-artifact@v4
+        with:
+          name: environment-file
+      - id: "download-image"
+        name: (User) Download Image
+        uses: actions/download-artifact@v4
+        with:
+          name: image
+      - id: "load"
+        name: (User) Image Load
+        shell: bash
+        run: |
+          docker load --input "image.tar"
+      - id: "image-name"
+        name: (User) Set Image Name
+        shell: bash
+        run: |
+          echo "image-name=$(basename "${{ github.repository }}")" >> ${GITHUB_ENV}
+      - id: "image-version-branch"
+        if: github.ref_type != 'tag'
+        name: (User) Set Image Version (Hash)
+        shell: bash
+        run: |
+          echo "image-version=${{ github.sha }}" >> ${GITHUB_ENV}
+      - id: "image-version-tag-v"
+        if: github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
+        name: (User) Set Image Version (Version)
+        shell: bash
+        run: |
+          echo "image-version=${GITHUB_REF#refs/tags/v}" >> ${GITHUB_ENV}
+      - id: "image-version-tag-semantic"
+        if: github.ref_type == 'tag' && ! startsWith(github.ref, 'refs/tags/v')
+        name: (User) Set Image Version (Semantic)
+        shell: bash
+        run: |
+          echo "image-version=${GITHUB_REF#refs/tags/}" >> ${GITHUB_ENV}
+      - id: "image-tag"
+        name: (User) Set Image Tag
+        shell: bash
+        run: |
+          echo "image-tag=${{ env.image-name }}:${{ env.image-version }}" >> ${GITHUB_ENV}
+      - id: "test"
+        name: (User) Test
+        shell: bash
+        run: |
+          docker run --env-file ".env" "${{ env.image-tag }}"

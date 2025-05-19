@@ -1,0 +1,110 @@
+# ##############################################################################
+# User
+# ##############################################################################
+
+### Testing
+
+tests
+phpunit.xml
+coverage
+
+### Utilities
+
+ci
+
+.github/automation
+deployments
+.github/code-scanning
+
+scripts
+
+### Internals
+
+internal
+
+### Documentation
+
+ISSUES.md
+SECURITY.md
+
+### Secrets & Configuration
+
+.env
+.env.*
+
+# ##############################################################################
+# PHP, Composer, Laravel
+# ##############################################################################
+
+### Vendors
+
+vendor
+
+### Generated Files + Cache
+
+storage/framework/cache/**
+storage/framework/sessions/**
+storage/framework/views/**
+
+storage/logs/**
+
+bootstrap/cache/*.php
+
+# ##############################################################################
+# Node.js, Webpack, etc.
+# ##############################################################################
+
+### Dependencies
+
+node_modules
+
+### Package Managers
+
+npm-debug.log*
+yarn-error.log*
+pnpm-lock.yaml
+
+# ##############################################################################
+# Docker Manifests and Configurations
+# ##############################################################################
+
+### Dockerfiles
+
+[Dd]ockerfile
+*.[Dd]ockerfile
+[Dd]ockerfile.*
+
+### Ignore
+
+.dockerignore
+
+### Other
+
+docker-compose.*
+
+# ##############################################################################
+# Common VCS-Specific CI/CD Directories
+# ##############################################################################
+
+### GitHub
+
+.github
+
+### GitLab
+
+.gitlab
+.gitlab-ci.yml
+
+# ##############################################################################
+# IDE
+# ##############################################################################
+
+### General
+
+.editorconfig
+
+### IDE + OS
+
+.idea
+.vscode
+*.iml
